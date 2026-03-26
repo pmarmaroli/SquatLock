@@ -31,10 +31,13 @@ _MODEL_PATH = os.path.join(os.path.dirname(__file__), "pose_landmarker_lite.task
 
 # How many frames to average for the standing baseline.
 _CALIBRATION_FRAMES = 30
+# How many frames to wait for the user to stand up (~5 sec at 30 fps).
+_WAIT_FRAMES = 150
 
 
 class _State(Enum):
-    CALIBRATING = auto()
+    WAITING = auto()      # countdown — user stands up
+    CALIBRATING = auto()  # recording standing baseline
     STANDING = auto()
     SQUATTING = auto()
 
@@ -74,8 +77,9 @@ class SquatDetector:
         )
         self._landmarker = _vision.PoseLandmarker.create_from_options(options)
 
-        self._state = _State.CALIBRATING
+        self._state = _State.WAITING
         self._frame_ts = 0
+        self._wait_counter = 0  # frames elapsed in WAITING phase
 
         # Calibration data
         self._cal_samples: list[float] = []
@@ -124,7 +128,8 @@ class SquatDetector:
     def reset(self) -> None:
         """Reset counter, state, and calibration."""
         self.count = 0
-        self._state = _State.CALIBRATING
+        self._state = _State.WAITING
+        self._wait_counter = 0
         self._cal_samples.clear()
         self._baseline_y = None
         self._y_buffer.clear()
@@ -172,6 +177,12 @@ class SquatDetector:
 
     def _update_state(self, smooth_y: float) -> float | None:
         """Advance state machine. Returns current *drop* distance or None."""
+        if self._state == _State.WAITING:
+            self._wait_counter += 1
+            if self._wait_counter >= _WAIT_FRAMES:
+                self._state = _State.CALIBRATING
+            return None
+
         if self._state == _State.CALIBRATING:
             self._cal_samples.append(smooth_y)
             if len(self._cal_samples) >= _CALIBRATION_FRAMES:
@@ -195,8 +206,25 @@ class SquatDetector:
     def _draw_hud(self, frame: np.ndarray, shoulder_y: float | None,
                   drop: float | None) -> None:
         """Draw status info on the frame."""
-        h = frame.shape[0]
+        h, w = frame.shape[:2]
         y_pos = 30
+
+        if self._state == _State.WAITING:
+            secs_left = max(1, (_WAIT_FRAMES - self._wait_counter) // 30)
+            # Large centered message
+            msg = "STAND UP!"
+            (tw, th), _ = cv2.getTextSize(msg, cv2.FONT_HERSHEY_SIMPLEX, 2.0, 4)
+            cv2.putText(
+                frame, msg, ((w - tw) // 2, h // 2 - 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 200, 255), 4,
+            )
+            countdown = f"Calibrating in {secs_left}s..."
+            (tw2, _), _ = cv2.getTextSize(countdown, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
+            cv2.putText(
+                frame, countdown, ((w - tw2) // 2, h // 2 + 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 200, 255), 2,
+            )
+            return
 
         if self._state == _State.CALIBRATING:
             progress = len(self._cal_samples)
