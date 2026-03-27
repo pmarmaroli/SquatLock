@@ -19,6 +19,7 @@ class App:
 
     def __init__(self):
         self._cfg = config.load()
+        self._next_exercise = "squat"  # alternates between "squat" and "twist"
 
         self._timer = TimerManager(
             interval_sec=self._cfg["interval_minutes"] * 60,
@@ -53,17 +54,28 @@ class App:
     # ------------------------------------------------------------------
 
     def _trigger_overlay(self) -> None:
+        exercise = self._next_exercise
+        if exercise == "twist":
+            reps = self._cfg["twists_required"]
+        else:
+            reps = self._cfg["squats_required"]
+
         overlay = LockOverlay(
-            squats_required=self._cfg["squats_required"],
-            drop_threshold=self._cfg["drop_threshold"],
-            rise_threshold=self._cfg["rise_threshold"],
+            exercise=exercise,
+            reps_required=reps,
             camera_index=self._cfg["camera_index"],
             on_unlock=self._on_unlock,
+            drop_threshold=self._cfg["drop_threshold"],
+            rise_threshold=self._cfg["rise_threshold"],
+            rotation_threshold=self._cfg["rotation_threshold"],
+            return_threshold=self._cfg["return_threshold"],
         )
         overlay.show()
 
     def _on_unlock(self) -> None:
-        """Called when the user finishes the required squats."""
+        """Called when the user finishes the exercise."""
+        # Alternate for next time.
+        self._next_exercise = "twist" if self._next_exercise == "squat" else "squat"
         self._timer.start()  # restart the countdown
 
     def _toggle_pause(self) -> None:

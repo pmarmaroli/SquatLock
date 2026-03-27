@@ -1,7 +1,8 @@
-"""Fullscreen lock overlay that shows webcam + squat counter.
+"""Fullscreen lock overlay that shows webcam + exercise counter.
 
 Uses tkinter for the window (always-on-top, non-closable) and embeds
 the OpenCV/MediaPipe video feed via PIL → tkinter PhotoImage.
+Supports both squat and twist exercises.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import cv2
 from PIL import Image, ImageTk
 
 from squat_detector import SquatDetector
+from twist_detector import TwistDetector
 
 
 def _get_all_monitors() -> list[tuple[int, int, int, int]]:
@@ -47,19 +49,26 @@ class LockOverlay:
 
     def __init__(
         self,
-        squats_required: int,
-        drop_threshold: float,
-        rise_threshold: float,
+        exercise: str,
+        reps_required: int,
         camera_index: int,
         on_unlock: Callable[[], None] | None = None,
+        *,
+        drop_threshold: float = 0.10,
+        rise_threshold: float = 0.04,
+        rotation_threshold: float = 0.50,
+        return_threshold: float = 0.75,
     ):
-        self._squats_required = squats_required
+        self._exercise = exercise  # "squat" or "twist"
+        self._reps_required = reps_required
         self._camera_index = camera_index
         self._on_unlock = on_unlock
         self._drop_threshold = drop_threshold
         self._rise_threshold = rise_threshold
+        self._rotation_threshold = rotation_threshold
+        self._return_threshold = return_threshold
 
-        self._detector: SquatDetector | None = None
+        self._detector: SquatDetector | TwistDetector | None = None
         self._cap: cv2.VideoCapture | None = None
 
         # Build UI in a separate thread so the caller isn't blocked.
@@ -80,7 +89,16 @@ class LockOverlay:
     def _run(self) -> None:
         # Create detector in THIS thread to keep MediaPipe resources
         # owned by the same thread that will use them.
-        self._detector = SquatDetector(self._drop_threshold, self._rise_threshold)
+        if self._exercise == "twist":
+            self._detector = TwistDetector(
+                self._rotation_threshold, self._return_threshold,
+            )
+        else:
+            self._detector = SquatDetector(
+                self._drop_threshold, self._rise_threshold,
+            )
+
+        exercise_label = "twists" if self._exercise == "twist" else "squats"
 
         self._root = tk.Tk()
         self._root.title("SquatLock")
@@ -96,9 +114,8 @@ class LockOverlay:
         self._root.bind("<Escape>", lambda e: None)
         # Space bar to start calibration.
         self._root.bind("<space>", lambda e: self._detector.signal_ready())
-        # Emergency exit: Ctrl+Shift+Q
-        self._root.bind("<Control-Shift-Q>", lambda e: self._unlock())
-        self._root.bind("<Control-Shift-q>", lambda e: self._unlock())
+        # Auto-unlock after 2 minutes.
+        self._root.after(2 * 60 * 1000, self._unlock)
 
         # --- Block ALL other monitors with black windows ---
         self._blockers: list[tk.Toplevel] = []
@@ -118,7 +135,7 @@ class LockOverlay:
             # Show a reminder on secondary screens
             tk.Label(
                 blocker,
-                text="Do your squats\nto unlock!",
+                text=f"Do your {exercise_label}\nto unlock!",
                 font=("Segoe UI", 28, "bold"),
                 fg="#555555",
                 bg="black",
@@ -140,7 +157,7 @@ class LockOverlay:
 
         self._status_label = tk.Label(
             self._root,
-            text="Do your squats to unlock!  (emergency: Ctrl+Shift+Q)",
+            text=f"Do your {exercise_label} to unlock!  (auto-unlock in 2 min)",
             font=("Segoe UI", 18),
             fg="#aaaaaa",
             bg="black",
@@ -191,7 +208,7 @@ class LockOverlay:
             self._counter_label.configure(text=self._counter_text())
 
             # Check unlock condition.
-            if self._detector.count >= self._squats_required:
+            if self._detector.count >= self._reps_required:
                 self._unlock()
                 return
 
@@ -202,7 +219,8 @@ class LockOverlay:
     # ------------------------------------------------------------------
 
     def _counter_text(self) -> str:
-        return f"{self._detector.count} / {self._squats_required} squats"
+        label = "twists" if self._exercise == "twist" else "squats"
+        return f"{self._detector.count} / {self._reps_required} {label}"
 
     def _unlock(self) -> None:
         """Dismiss the overlay on all screens and notify the caller."""
