@@ -7,8 +7,8 @@ CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".squatlock_config.json")
 
 DEFAULTS = {
     "interval_minutes": 45,
-    "squats_required": 10,
-    "twists_required": 20,
+    "squats_required": 5,
+    "twists_required": 10,
     "drop_threshold": 0.10,  # shoulder must drop 10% of frame height
     "rise_threshold": 0.04,  # shoulder must return within 4% of baseline
     "rotation_threshold": 0.50,  # width ratio below which torso is rotated
