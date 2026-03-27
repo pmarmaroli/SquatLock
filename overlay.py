@@ -87,6 +87,7 @@ class LockOverlay:
         self._root.attributes("-fullscreen", True)
         self._root.attributes("-topmost", True)
         self._root.configure(bg="black")
+        self._root.focus_force()
 
         # Prevent Alt-F4 and other close attempts.
         self._root.protocol("WM_DELETE_WINDOW", lambda: None)
