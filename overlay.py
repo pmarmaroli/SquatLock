@@ -93,6 +93,8 @@ class LockOverlay:
         self._root.bind("<Alt-F4>", lambda e: "break")
         # Capture Escape so overlay can't be dismissed.
         self._root.bind("<Escape>", lambda e: None)
+        # Space bar to start calibration.
+        self._root.bind("<space>", lambda e: self._detector.signal_ready())
         # Emergency exit: Ctrl+Shift+Q
         self._root.bind("<Control-Shift-Q>", lambda e: self._unlock())
         self._root.bind("<Control-Shift-q>", lambda e: self._unlock())
