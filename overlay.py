@@ -18,6 +18,7 @@ from PIL import Image, ImageTk
 
 from squat_detector import SquatDetector
 from twist_detector import TwistDetector
+from neck_tilt_detector import NeckTiltDetector
 
 
 def _get_all_monitors() -> list[tuple[int, int, int, int]]:
@@ -58,8 +59,11 @@ class LockOverlay:
         rise_threshold: float = 0.04,
         rotation_threshold: float = 0.50,
         return_threshold: float = 0.75,
+        neck_tilt_threshold: float = 0.20,
+        neck_tilt_return_threshold: float = 0.10,
+        neck_tilt_hold_min_sec: float = 5.0,
     ):
-        self._exercise = exercise  # "squat" or "twist"
+        self._exercise = exercise  # "squat", "twist", or "neck_tilt"
         self._reps_required = reps_required
         self._camera_index = camera_index
         self._on_unlock = on_unlock
@@ -67,8 +71,11 @@ class LockOverlay:
         self._rise_threshold = rise_threshold
         self._rotation_threshold = rotation_threshold
         self._return_threshold = return_threshold
+        self._neck_tilt_threshold = neck_tilt_threshold
+        self._neck_tilt_return_threshold = neck_tilt_return_threshold
+        self._neck_tilt_hold_min_sec = neck_tilt_hold_min_sec
 
-        self._detector: SquatDetector | TwistDetector | None = None
+        self._detector: SquatDetector | TwistDetector | NeckTiltDetector | None = None
         self._cap: cv2.VideoCapture | None = None
 
         # Build UI in a separate thread so the caller isn't blocked.
@@ -89,7 +96,14 @@ class LockOverlay:
     def _run(self) -> None:
         # Create detector in THIS thread to keep MediaPipe resources
         # owned by the same thread that will use them.
-        if self._exercise == "twist":
+        if self._exercise == "neck_tilt":
+            self._detector = NeckTiltDetector(
+                tilt_threshold=self._neck_tilt_threshold,
+                return_threshold=self._neck_tilt_return_threshold,
+                hold_min_sec=self._neck_tilt_hold_min_sec,
+                reps_per_side=self._reps_required,
+            )
+        elif self._exercise == "twist":
             self._detector = TwistDetector(
                 self._rotation_threshold, self._return_threshold,
             )
@@ -98,7 +112,12 @@ class LockOverlay:
                 self._drop_threshold, self._rise_threshold,
             )
 
-        exercise_label = "twists" if self._exercise == "twist" else "squats"
+        if self._exercise == "neck_tilt":
+            exercise_label = "neck tilts"
+        elif self._exercise == "twist":
+            exercise_label = "twists"
+        else:
+            exercise_label = "squats"
 
         self._root = tk.Tk()
         self._root.title("SquatLock")
@@ -208,7 +227,11 @@ class LockOverlay:
             self._counter_label.configure(text=self._counter_text())
 
             # Check unlock condition.
-            if self._detector.count >= self._reps_required:
+            if self._exercise == "neck_tilt":
+                unlocked = self._detector.is_complete
+            else:
+                unlocked = self._detector.count >= self._reps_required
+            if unlocked:
                 self._unlock()
                 return
 
@@ -219,6 +242,12 @@ class LockOverlay:
     # ------------------------------------------------------------------
 
     def _counter_text(self) -> str:
+        if self._exercise == "neck_tilt":
+            n = self._reps_required  # per side
+            return (
+                f"Right: {self._detector.right_count}/{n}   "
+                f"Left: {self._detector.left_count}/{n}  neck tilts"
+            )
         label = "twists" if self._exercise == "twist" else "squats"
         return f"{self._detector.count} / {self._reps_required} {label}"
 

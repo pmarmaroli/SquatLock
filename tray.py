@@ -66,7 +66,7 @@ class TrayIcon:
                 lambda _: "Resume" if self._is_paused() else "Pause",
                 self._on_pause_toggle,
             ),
-            pystray.MenuItem("Squat now!", self._on_trigger_now),
+            pystray.MenuItem("Exercise now!", self._on_trigger_now),
             pystray.MenuItem("Settings…", self._on_settings),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", self._on_quit),

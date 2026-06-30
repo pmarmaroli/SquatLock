@@ -9,6 +9,10 @@ DEFAULTS = {
     "interval_minutes": 45,
     "squats_required": 5,
     "twists_required": 10,
+    "neck_tilts_required": 3,       # reps per side
+    "neck_tilt_threshold": 0.12,    # normalised nose-to-shoulder-midpoint displacement to detect tilt
+    "neck_tilt_return_threshold": 0.06,  # displacement below which head is back to neutral
+    "neck_tilt_hold_min_sec": 5.0,       # minimum hold time per side rep (seconds)
     "drop_threshold": 0.10,  # shoulder must drop 10% of frame height
     "rise_threshold": 0.04,  # shoulder must return within 4% of baseline
     "rotation_threshold": 0.50,  # width ratio below which torso is rotated

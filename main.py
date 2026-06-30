@@ -19,7 +19,8 @@ class App:
 
     def __init__(self):
         self._cfg = config.load()
-        self._next_exercise = "squat"  # alternates between "squat" and "twist"
+        self._exercise_cycle = ["squat", "twist", "neck_tilt"]
+        self._exercise_idx = 0
 
         self._timer = TimerManager(
             interval_sec=self._cfg["interval_minutes"] * 60,
@@ -54,8 +55,10 @@ class App:
     # ------------------------------------------------------------------
 
     def _trigger_overlay(self) -> None:
-        exercise = self._next_exercise
-        if exercise == "twist":
+        exercise = self._exercise_cycle[self._exercise_idx]
+        if exercise == "neck_tilt":
+            reps = self._cfg["neck_tilts_required"]
+        elif exercise == "twist":
             reps = self._cfg["twists_required"]
         else:
             reps = self._cfg["squats_required"]
@@ -69,13 +72,16 @@ class App:
             rise_threshold=self._cfg["rise_threshold"],
             rotation_threshold=self._cfg["rotation_threshold"],
             return_threshold=self._cfg["return_threshold"],
+            neck_tilt_threshold=self._cfg["neck_tilt_threshold"],
+            neck_tilt_return_threshold=self._cfg["neck_tilt_return_threshold"],
+            neck_tilt_hold_min_sec=self._cfg["neck_tilt_hold_min_sec"],
         )
         overlay.show()
 
     def _on_unlock(self) -> None:
         """Called when the user finishes the exercise."""
-        # Alternate for next time.
-        self._next_exercise = "twist" if self._next_exercise == "squat" else "squat"
+        # Advance to the next exercise in the rotation.
+        self._exercise_idx = (self._exercise_idx + 1) % len(self._exercise_cycle)
         self._timer.start()  # restart the countdown
 
     def _toggle_pause(self) -> None:
@@ -111,8 +117,18 @@ class App:
         if squats is not None:
             self._cfg["squats_required"] = squats
 
-        root.destroy()
+        neck_tilts = simpledialog.askinteger(
+            "SquatLock Settings",
+            "Neck tilts required (per side):",
+            initialvalue=self._cfg["neck_tilts_required"],
+            minvalue=1,
+            maxvalue=20,
+            parent=root,
+        )
+        if neck_tilts is not None:
+            self._cfg["neck_tilts_required"] = neck_tilts
 
+        root.destroy()
         config.save(self._cfg)
         self._timer.interval = self._cfg["interval_minutes"] * 60
         self._timer.start()
